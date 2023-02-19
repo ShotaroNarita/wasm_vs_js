@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+  <!-- <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/default.min.css"> -->
+  <title>Javascript vs Wasm by Rust</title>
+</head>
+
+<body>
+  <div class="p-6" id="app">
+    <div>
+      <h1 class="title"> Javascript vs Wasm by Rust </h1>
+      <p> Compute the <strong>N</strong>-th power of a random square matrix with size <strong>M</strong></p>
+      <p> To prevent overflow, modulo operation by 65536 is performed. </p>
+      <hr>
+    </div>
+
+    <div class="p-2">
+      <label>loop count (N): </label>
+      <input class="input" type="number" min="1" max="100000000" v-model="count">
+    </div>
+
+    <div class="p-2">
+      <label>matrix size (M): </label>
+      <input class="input" type="number" min="1" max="100" v-model="size">
+    </div>
+
+    <div class="p-2">
+      <pre><code>{{ary_str}}</code></pre>
+    </div>
+
+    <hr>
+
+    <table class="table is-fullwidth">
+
+      <tr>
+        <th></th>
+        <th>json</th>
+        <th>time</th>
+      </tr>
+
+
+      <tr>
+        <td><button class="button" @click="start_js_calc" :disabled="calcurating || !init_done">calcurate with
+            js</button></td>
+        <td>
+          <pre><code>{{parse_and_format(js_result.json)}}</code></pre>
+        </td>
+        <td>{{js_result.time}} ms</td>
+      </tr>
+
+      <tr>
+        <td><button class="button" @click="start_rs_calc" :disabled="calcurating || !init_done">calcurate with
+            rs</button></td>
+        <td>
+          <pre><code class="language-rust hljs">{{parse_and_format(rs_result.json)}}</code></pre>
+        </td>
+        <td>{{rs_result.time}} ms</td>
+      </tr>
+    </table>
+
+    <hr>
+
+    <div>
+      <h2>Rust code</h2>
+      <pre><code>{{rs_code}}</code></pre>
+      <hr>
+    </div>
+
+    <div>
+      <h2>JS code</h2>
+      <pre><code>{{js_code}}</code></pre>
+      <hr>
+    </div>
+
+  </div>
+
+  <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script> -->
+  <script src="https://cdn.jsdelivr.net/npm/vue@2.7.11/dist/vue.js"></script>
+  <script src="./calc.js"></script>
+
+  <script type="module">
+    import init, { compute_rs } from "./pkg/hello_wasm.js";
+
+    const app = new Vue({
+      el: '#app',
+      data: () => {
+        return {
+          js_result: { time: '-', json: '-' },
+          rs_result: { time: '-', json: '-' },
+          rs_code: '-',
+          js_code: '-',
+          calcurating: false,
+          init_done: false,
+          str: '{"elements":[[1,2,3], [4,5,6], [7,8,9]],"rows":3,"cols":3}',
+          count: 1000,
+          size: 10,
+          elements: []
+        }
+      },
+
+      async mounted() {
+        // init().then(() => {
+        //   this.init_done = true
+        // })
+
+        await init()
+        this.init_done = true
+
+        let res, code
+        res = await fetch('./calc.js')
+        this.js_code = await res.text()
+
+        res = await fetch('./src/lib.rs')
+        this.rs_code = await res.text()
+
+        // hljs.highlightAll()
+
+      },
+
+      computed: {
+        ary_str() {
+          this.random_square()
+          let d = {
+            elements: this.elements,
+            rows: this.size,
+            cols: this.size,
+          }
+          return this.format(d)
+        }
+      },
+
+      methods: {
+        parse_and_format(str) {
+          let data = {}
+          try {
+            data = JSON.parse(str)
+          } catch (e) {
+            return '-'
+          }
+
+          return this.format(data)
+        },
+
+        format(json) {
+          let rev = `{\n"rows": ${json.rows}, "cols": ${json.cols},\n`
+          rev += `"elements": [\n`
+          rev += json.elements.map(line => {
+            return `\t[${line.join(', ')}]`
+          }).join(',\n')
+          rev += `\n]\n}`
+          return rev
+        },
+
+        async start_js_calc() {
+          this.calcurating = true
+          setTimeout(() => {
+            const begintime = performance.now()
+            compute_js(this.ary_str, this.count).then(res => {
+              const endtime = performance.now()
+              this.js_result = {
+                json: res,
+                time: endtime - begintime,
+              }
+              this.calcurating = false
+
+            })
+          }, 100)
+        },
+
+        async start_rs_calc() {
+          this.calcurating = true
+          setTimeout(() => {
+            const begintime = performance.now()
+            compute_rs(this.ary_str, this.count).then(res => {
+              const endtime = performance.now()
+              this.rs_result = {
+                json: res,
+                time: endtime - begintime,
+              }
+              this.calcurating = false
+
+            })
+          }, 100)
+        },
+
+        random_square() {
+          this.elements = new Array(this.size)
+          for (let i = 0; i < this.size; i++) {
+            this.elements[i] = new Array(this.size)
+            for (let j = 0; j < this.size; j++) {
+              this.elements[i][j] = Math.floor(Math.random() * 10)
+            }
+          }
+        }
+      }
+    })
+  </script>
+
+
+</body>
+
+</html>
